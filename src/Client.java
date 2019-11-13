@@ -56,6 +56,8 @@ public class Client {
   static final int INIT = 0;
   static final int READY = 1;
   static final int PLAYING = 2;
+  static final int PAUSE = 3;
+  static final int TEARDOWN = 4;
   static int state; // RTSP state == INIT or READY or PLAYING
   Socket RTSPsocket; // socket used to send/receive RTSP messages
   // input and output stream filters
@@ -189,14 +191,11 @@ public class Client {
       if (state == INIT) {
         // Init non-blocking RTPsocket that will be used to receive data
         try {
-          //TODO PM: construct a new DatagramSocket to receive server RTP packets on port RTP_RCV_PORT
-          RTPsocket = new DatagramSocket();
-
+          RTPsocket = new DatagramSocket(RTP_RCV_PORT);
           // for now FEC packets are received via RTP-Port, so keep comment below
           // FECsocket = new DatagramSocket(FEC_RCV_PORT);
 
-          //TODO PM: set Timeout value of the socket to 1 ms
-          // ....
+          RTPsocket.setSoTimeout(1);
 
           // Init the FEC-handler
           fec = new FecHandler();
@@ -216,10 +215,8 @@ public class Client {
         System.out.println("Wait for response...");
         if (parse_server_response() != 200) System.out.println("Invalid Server Response");
         else {
-          //TODO PM: change RTSP state and print new state to console and statusLabel
-          // state = ....
-          // statusLabel
-          // System.out.println("New RTSP state: ");
+          state = READY;
+          System.out.println("New RTSP state: READY " + state);
         }
       } // else if state != INIT then do nothing
     }
@@ -231,8 +228,7 @@ public class Client {
 
       System.out.println("Play Button pressed !");
       if (state == READY) {
-        //TODO PM: increase RTSP sequence number
-        // .....
+        RTSPSeqNb++;
 
         // Send PLAY message to the server
         send_RTSP_request("PLAY");
@@ -240,9 +236,8 @@ public class Client {
         // Wait for the response
         if (parse_server_response() != 200) System.out.println("Invalid Server Response");
         else {
-          //TODO PM: change RTSP state and print out new state to console an statusLabel
-          // state = ....
-
+          state = PLAYING;
+          System.out.println("New RTSP state: PLAYING " + state);
           // start the timer
           timer.start();
           timerPlay.start();
@@ -257,18 +252,15 @@ public class Client {
 
       System.out.println("Pause Button pressed !");
       if (state == PLAYING) {
-        //TODO PM: increase RTSP sequence number
-        // ....
-
+        RTSPSeqNb++;
         // Send PAUSE message to the server
         send_RTSP_request("PAUSE");
 
         // Wait for the response
         if (parse_server_response() != 200) System.out.println("Invalid Server Response");
         else {
-          //TODO PM: change RTSP state and print out new state to console and statusLabel
-          // state = ....
-
+          state = PAUSE;
+          System.out.println("New RTSP state: PAUSE " + state);
           // stop the timer
           timer.stop();
           timerPlay.stop();
@@ -284,17 +276,15 @@ public class Client {
     public void actionPerformed(ActionEvent e) {
 
       System.out.println("Teardown Button pressed !");
-      //TODO PM: increase RTSP sequence number
-
+      RTSPSeqNb++;
       // Send TEARDOWN message to the server
       send_RTSP_request("TEARDOWN");
 
       // Wait for the response
       if (parse_server_response() != 200) System.out.println("Invalid Server Response");
       else {
-        //TODO PM: change RTSP state and print out new state to console and statusLabel
-        // state = ....
-
+        state = TEARDOWN;
+        System.out.println("New RTSP state: TEARDOWN " + state);
         // stop the timer
         timer.stop();
         timerPlay.stop();
@@ -348,7 +338,6 @@ public class Client {
                 + (0xFFFFFFFFL & rtp.gettimestamp())  // cast to long
                 + " ms, of type "
                 + rtp.getpayloadtype());
-
         rtp.printheader(); // print header bitstream:
         fec.rcvRtpPacket(rtp); // stores the received RTP packet in jitter buffer
 
@@ -387,11 +376,11 @@ public class Client {
         rex.printStackTrace();
       }
 
-      //TODO PM: complete the statistics
+      //TODO PM: complete the statistics Abschnitt 5
       pufferLabel.setText(
           "Puffer: "
               + ""  //
-              + " aktuelle Nr. / Summe empf.: "
+              + " aktuelle Nr: / Summe empf.: "
               + " / "
               + "");
       statsLabel.setText(
@@ -510,18 +499,13 @@ public class Client {
       if (request_type.equals("SETUP")) rtsp = rtsp + "/trackID=0";
 
       String rtspReq = "";
-      //TODO PM: Complete the RTSP request method line
-      // rtspReq = ....
-
-      //TODO PM: write the CSeq line:
-      // rtspReq += ....
-
+      rtspReq = "SETUP "+rtsp+ "RTSP/1.0\n";
+      rtspReq += "CSeq = 1\n";
       // check if request_type is equal to "SETUP" and in this case write the Transport: line
       // advertising to the server the port used to receive the RTP packets RTP_RCV_PORT
       // otherwise, write the Session line from the RTSPid field
       if (request_type.equals("SETUP")) {
-        //TODO PM: Complete the Transport Attribute
-        rtspReq += "Transport:";
+        rtspReq += "Transport: rtp/udp; compression; port" +rtspPort+"; mode=PLAY";
       }
 
       // SessionIS if available
