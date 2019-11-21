@@ -499,13 +499,13 @@ public class Client {
       if (request_type.equals("SETUP")) rtsp = rtsp + "/trackID=0";
 
       String rtspReq = "";
-      rtspReq = "SETUP "+rtsp+ "RTSP/1.0\n";
-      rtspReq += "CSeq = 1\n";
+      rtspReq = request_type + " " + rtsp+ "RTSP/1.0\n";
+      rtspReq += "CSeq: 1\n";
       // check if request_type is equal to "SETUP" and in this case write the Transport: line
       // advertising to the server the port used to receive the RTP packets RTP_RCV_PORT
       // otherwise, write the Session line from the RTSPid field
       if (request_type.equals("SETUP")) {
-        rtspReq += "Transport: rtp/udp; compression; port" +rtspPort+"; mode=PLAY";
+        rtspReq += "Transport: rtp/udp; compression; port=" +rtspPort + CRLF;
       }
 
       // SessionIS if available
