@@ -14,6 +14,7 @@ import javax.swing.*;
 import javax.swing.Timer;
 
 public class Client {
+  static int videoLength = 2800;
 
   // GUI
   // ----
@@ -35,6 +36,9 @@ public class Client {
   JLabel fecLabel = new JLabel("FEC: "); // Statistics
   ImageIcon icon;
   JTextField textField = new JTextField("mystream", 30);
+  JProgressBar progressBuffer = new JProgressBar(0, 100);
+  JProgressBar progressPosition = new JProgressBar(0, videoLength);
+  JCheckBox checkBoxFec = new JCheckBox("FEC");
 
   // RTP variables:
   // ----------------
@@ -46,6 +50,7 @@ public class Client {
 
   static final int MAX_FRAME_SIZE = 65536;
   static final int RCV_RATE = 2; // interval for receiving loop
+  int jitterBufferSize = 50; // size of the input buffer => start delay
 
   Timer timer; // timer used to receive data from the UDP socket
   Timer timerPlay; // timer used to display the frames at correct frame rate
@@ -67,10 +72,12 @@ public class Client {
   static int rtspPort;
   static String rtspUrl;
   static String VideoFileName; // video file to request to the server
+
   static int RTSPSeqNb = 0; // Sequence number of RTSP messages within the session
   String RTSPid = "0"; // ID of the RTSP session (given by the RTSP Server)
 
   static final String CRLF = "\r\n";
+  static final String nl = System.getProperty("line.separator");
 
   // Video constants:
   // ------------------
@@ -106,11 +113,12 @@ public class Client {
     iconLabel.setIcon(null);
 
     // Text
-    statsPanel.setLayout(new GridLayout(4, 0));
+    statsPanel.setLayout(new GridLayout(5, 0));
     statsPanel.add(statusLabel);
     statsPanel.add(pufferLabel);
     statsPanel.add(statsLabel);
     statsPanel.add(fecLabel);
+    statsPanel.add(checkBoxFec);
 
     inputPanel.setLayout(new BorderLayout());
     inputPanel.add(textField, BorderLayout.SOUTH);
@@ -120,11 +128,16 @@ public class Client {
     mainPanel.add(iconLabel);
     mainPanel.add(buttonPanel);
     mainPanel.add(statsPanel);
+    mainPanel.add(progressBuffer);
+    mainPanel.add(progressPosition);
     mainPanel.add(inputPanel);
     iconLabel.setBounds(0, 0, 640, 480);
     buttonPanel.setBounds(0, 480, 640, 50);
-    statsPanel.setBounds(0, 550, 640, 150);
-    inputPanel.setBounds(0, 700, 640, 100);
+    statsPanel.setBounds(10, 550, 620, 150);
+    progressBuffer.setBounds(10, 700, 620, 20);
+    progressPosition.setBounds(10, 730, 620, 20);
+    inputPanel.setBounds(10, 750, 620, 50);
+    // inputPanel.setSize(620,50);
 
     f.getContentPane().add(mainPanel, BorderLayout.CENTER);
     f.setSize(new Dimension(640, 800));
@@ -135,10 +148,6 @@ public class Client {
     timer = new Timer(RCV_RATE, new timerListener());
     timer.setInitialDelay(0);
     timer.setCoalesce(true); // combines events
-
-    timerPlay = new Timer(FRAME_RATE, new timerPlayListener());
-    timerPlay.setInitialDelay(2000);
-    timerPlay.setCoalesce(true); // combines events
   }
 
   /**
@@ -178,10 +187,9 @@ public class Client {
     state = INIT;
     // init RTSP sequence number
     RTSPSeqNb = 1;
-
   }
 
-  // TODO PM: Complete all button handlers
+  // TASK Complete all button handlers
   /** Handler for the Setup button */
   class setupButtonListener implements ActionListener {
     public void actionPerformed(ActionEvent e) {
@@ -198,8 +206,12 @@ public class Client {
           RTPsocket.setSoTimeout(1);
 
           // Init the FEC-handler
-          fec = new FecHandler();
-          timerPlay.setInitialDelay(2000);
+          fec = new FecHandler( checkBoxFec.isSelected() );
+          // Init the play timer
+          timerPlay = new Timer(FRAME_RATE, new timerPlayListener());
+          timerPlay.setCoalesce(true); // combines events
+
+          // timerPlay.setInitialDelay(0);
 
         } catch (SocketException se) {
           System.out.println("Socket exception: " + se);
@@ -332,13 +344,18 @@ public class Client {
 
         // print important header fields of the RTP packet received:
         System.out.println(
-            "Got RTP packet with SeqNum # "
+            "---------------- Receiver -----------------------"
+                + nl
+                + "Got RTP packet with SeqNum # "
                 + rtp.getsequencenumber()
-                + " TimeStamp "
-                + (0xFFFFFFFFL & rtp.gettimestamp())  // cast to long
+                + " TimeStamp: "
+                + (0xFFFFFFFFL & rtp.gettimestamp()) // cast to long
                 + " ms, of type "
-                + rtp.getpayloadtype());
-        rtp.printheader(); // print header bitstream:
+                + rtp.getpayloadtype()
+                + " Size: " + rtp.getlength());
+
+        // TASK remove comment for debugging
+        rtp.printheader(); // print rtp header bitstream for debugging
         fec.rcvRtpPacket(rtp); // stores the received RTP packet in jitter buffer
 
       } catch (InterruptedIOException iioe) {
@@ -349,21 +366,41 @@ public class Client {
     }
   }
 
-  /** Displays one Frame if available */
+  /** Displays one frame if available */
   class timerPlayListener implements ActionListener {
+    boolean videoStart = false;
+
     public void actionPerformed(ActionEvent e) {
-      DecimalFormat df = new DecimalFormat("###.###");
+      byte[] payload;
+
+      // check buffer size and start if filled
+      int puffer = fec.getSeqNr() - fec.getPlayCounter();
+      progressBuffer.setValue(puffer);
+      progressPosition.setValue(fec.getPlayCounter());
+      setStatistics();
+
+      // check for beginning of display JPEGs
+      if ((puffer < jitterBufferSize) && !videoStart) {
+        return;
+      } else videoStart = true;
+      // check for end of display JPEGs
+      if (puffer <= 0) { // buffer empty -> finish
+        statusLabel.setText("End of Stream");
+        return;
+      }
+
+      System.out.println("----------------- Play timer --------------------");
+      // get a list of rtps from jitter buffer
+      List<RTPpacket> rtpList = fec.getNextRtpList();
+
+      // TODO decoding of incomplete list to show fragments of pictures instead of discarding
+      if (rtpList == null) return;
+
+      payload = JpegFrame.combineToOneImage(rtpList);
+      System.out.println("Display TS: " + (0xFFFFFFFFL & rtpList.get(0).TimeStamp)
+          + " size: " + payload.length);
 
       try {
-        // get a list of rtps from jitter buffer
-        byte[] payload = JpegFrame.combineToOneImage( fec.getNextRtpList() );
-
-        // buffer empty -> finish
-        if (payload == null) {
-          statusLabel.setText("End of Stream");
-          return;
-        }
-
         // get an Image object from the payload bitstream
         Toolkit toolkit = Toolkit.getDefaultToolkit();
         Image image = toolkit.createImage(payload, 0, payload.length);
@@ -375,16 +412,19 @@ public class Client {
       } catch (RuntimeException rex) {
         rex.printStackTrace();
       }
+    }
 
-      //TODO PM: complete the statistics Abschnitt 5
+      //TASK complete the statistics
+    private void setStatistics() {
+      DecimalFormat df = new DecimalFormat("###.###");
       pufferLabel.setText(
           "Puffer: "
               + ""  //
-              + " aktuelle Nr: / Summe empf.: "
+              + " aktuelle Nr. / Summe empf.: "
               + " / "
               + "");
       statsLabel.setText(
-          "<html>Abspielzähler / verlorene Bilder: "
+          "<html>Abspielzähler / verlorene Medienpakete // Bilder / verloren: "
               + ""
               + " / "
               + ""
@@ -422,13 +462,13 @@ public class Client {
       } while (!line.equals(""));
       ListIterator<String> respIter = respLines.listIterator(0);
 
-      StringTokenizer tokens = new StringTokenizer( respIter.next() );
+      StringTokenizer tokens = new StringTokenizer(respIter.next());
       tokens.nextToken(); // skip over the RTSP version
       reply_code = Integer.parseInt(tokens.nextToken());
 
-      while ( respIter.hasNext() ) {
+      while (respIter.hasNext()) {
         line = respIter.next();
-        StringTokenizer headerField = new StringTokenizer( line);
+        StringTokenizer headerField = new StringTokenizer(line);
 
         switch (headerField.nextToken().toLowerCase()) {
           case "cseq:":
@@ -437,7 +477,7 @@ public class Client {
 
           case "session:":
             if (state == INIT) {
-              RTSPid = headerField.nextToken().split(";")[0];  // cat semicolon
+              RTSPid = headerField.nextToken().split(";")[0]; // cat semicolon
             }
             break;
 
@@ -459,7 +499,7 @@ public class Client {
             break;
 
           default:
-            System.out.println("Unknown: " + line );
+            System.out.println("Unknown: " + line);
         }
       }
       System.out.println("*** End of Response Header ***\n----------------");
@@ -475,17 +515,14 @@ public class Client {
     return (reply_code);
   }
 
-
   private void parse_server_data(int cl) throws Exception {
     char[] cbuf = new char[cl];
     System.out.println("*** Parsing Response Data...");
     int data = RTSPBufferedReader.read(cbuf, 0, cl);
     System.out.println("Data: " + data);
-    System.out.print(new String(cbuf) );
+    System.out.print(new String(cbuf));
     System.out.println("Finished Content Reading...");
   }
-
-
 
   /**
    * Send the RTSP Request
@@ -513,7 +550,7 @@ public class Client {
         rtspReq += "Session: " + RTSPid + CRLF;
       }
 
-      System.out.println(rtspReq);  // console debug
+      System.out.println(rtspReq); // console debug
       // Use the RTSPBufferedWriter to write to the RTSP socket
       RTSPBufferedWriter.write(rtspReq + CRLF);
       RTSPBufferedWriter.flush();
