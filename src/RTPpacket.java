@@ -75,7 +75,7 @@ public class RTPpacket {
 
   public void setRtpHeader() {
     header[0] |= Version << 6 | Padding << 5 | Extension << 4 | CC;
-    header[1] = (byte)(PayloadType << 1);
+    header[1] = (byte)(PayloadType);
     header[2] = (byte)(SequenceNumber >> 8);
     header[3] = (byte)(SequenceNumber);
     header[4] = (byte) (TimeStamp >> 32);

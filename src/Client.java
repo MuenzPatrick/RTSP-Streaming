@@ -3,6 +3,8 @@ Client
 usage: java Client [Server hostname] [Server RTSP listening port] [Video file requested]
 ---------------------- */
 
+import sun.security.krb5.internal.SeqNumber;
+
 import java.io.*;
 import java.net.*;
 import java.text.DecimalFormat;
@@ -271,7 +273,7 @@ public class Client {
         // Wait for the response
         if (parse_server_response() != 200) System.out.println("Invalid Server Response");
         else {
-          state = PAUSE;
+          state = READY;
           System.out.println("New RTSP state: PAUSE " + state);
           // stop the timer
           timer.stop();
@@ -295,7 +297,7 @@ public class Client {
       // Wait for the response
       if (parse_server_response() != 200) System.out.println("Invalid Server Response");
       else {
-        state = TEARDOWN;
+        state = INIT;
         System.out.println("New RTSP state: TEARDOWN " + state);
         // stop the timer
         timer.stop();
@@ -357,11 +359,12 @@ public class Client {
         // TASK remove comment for debugging
         rtp.printheader(); // print rtp header bitstream for debugging
         fec.rcvRtpPacket(rtp); // stores the received RTP packet in jitter buffer
+        RTSPSeqNb++;
 
       } catch (InterruptedIOException iioe) {
         // System.out.println("Nothing to read");
       } catch (IOException ioe) {
-        System.out.println("Exception caught: " + ioe);
+          System.out.println("Exception caught: " + ioe);
       }
     }
   }
@@ -417,25 +420,31 @@ public class Client {
       //TASK complete the statistics
     private void setStatistics() {
       DecimalFormat df = new DecimalFormat("###.###");
+      double ratio = 0.0;
+      if((fec.getNrCorrected()+fec.getNrNotCorrected())> 0) {
+          ratio = fec.getNrCorrected()/(fec.getNrCorrected()+fec.getNrNotCorrected());
+      } else {
+          ratio = 0.0;
+      }
       pufferLabel.setText(
           "Puffer: "
               + ""  //
               + " aktuelle Nr. / Summe empf.: "
-              + " / "
+              + fec.getSeqNr() + " / " + RTSPSeqNb
               + "");
       statsLabel.setText(
           "<html>Abspielzähler / verlorene Medienpakete // Bilder / verloren: "
               + ""
-              + " / "
+              + fec.getPlayCounter() + " / " + fec.getNrLost() + " // " + fec.getNrFramesRequested() + " / " + fec.getNrFramesLost()
               + ""
               + "<p/>"
               + "</html>");
       fecLabel.setText(
           "FEC: korrigiert / nicht korrigiert: "
               + ""
-              + " / "
+              + fec.getNrCorrected() + " / " + fec.getNrNotCorrected()
               + ""
-              + "  Ratio: "
+              + "  Ratio: " + ratio
               + "");
     }
   }
@@ -542,7 +551,7 @@ public class Client {
       // advertising to the server the port used to receive the RTP packets RTP_RCV_PORT
       // otherwise, write the Session line from the RTSPid field
       if (request_type.equals("SETUP")) {
-        rtspReq += "Transport: rtp/udp; compression; port=" +rtspPort + CRLF;
+        rtspReq += "Transport: rtp/udp; compression; port=" + RTP_RCV_PORT + CRLF;
       }
 
       // SessionIS if available
