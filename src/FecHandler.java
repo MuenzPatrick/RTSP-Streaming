@@ -284,7 +284,14 @@ public class FecHandler {
       if (n == lastCorrected) {
         return false;
       }
+      if(n != nr) {
+        RTPpacket p = rtpStack.get(n);
+        if (p == null) {
+          return false;
+        }
+      }
     }
+
     lastCorrected = nr;
     return true;
   }
@@ -301,13 +308,17 @@ public class FecHandler {
     List<Integer> fecPacketList  = fecList.get(nr);
     ArrayList<Byte>data = new ArrayList<Byte>();
 
+    fec.setFecHeader(maxGroupSize,this.FEC_PT,nr,0,0);
+
     for (int i:fecPacketList) {
       if(i != nr) {
         RTPpacket p = rtpStack.get(i);
         fec.addRtp(p);
       }
     }
-    return fec.getLostRtp(nr);
+    RTPpacket corrected = fec.getLostRtp(nr);
+    //rtpStack.put(nr,corrected);
+    return corrected;
   }
 
   /**
