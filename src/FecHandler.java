@@ -36,7 +36,7 @@ public class FecHandler {
   static final int maxGroupSize = 48;
   int fecGroupSize; // FEC group size
   int fecGroupCounter;
-  boolean groupCorrected = false;
+  int lastCorrected = 0;
 
   // -> Receiver
   boolean useFec;
@@ -102,7 +102,6 @@ public class FecHandler {
     // Adjust and reset all involved variables
     fecSeqNr++;
     fecGroupCounter = 0;
-    groupCorrected = false;
     byte[] buf = fec.getpacket();
     fec = null; // reset fec
     return buf;
@@ -225,7 +224,6 @@ public class FecHandler {
       nrLost++;
       if (checkCorrection(snr) && useFec) {
         nrCorrected++;
-        groupCorrected = true;
         System.out.println("---> FEC: correctable: " + snr);
         return correctRtp(snr);
       } else {
@@ -280,7 +278,15 @@ public class FecHandler {
     //TASK complete this method!
     //Ein Paketverlust tritt auf, wenn von den k+1
     //zusammengehörigen Paketen mehr als ein Paket verloren geht.
-    return !groupCorrected;
+    List<Integer> fecPacketList = fecList.get(nr);
+    if(fecPacketList == null) return false;
+    for(int n : fecPacketList) {
+      if (n == lastCorrected) {
+        return false;
+      }
+    }
+    lastCorrected = nr;
+    return true;
   }
 
   /**
@@ -291,11 +297,16 @@ public class FecHandler {
    */
   private RTPpacket correctRtp(int nr) {
     //TASK complete this method!
+
     List<Integer> fecPacketList  = fecList.get(nr);
     ArrayList<Byte>data = new ArrayList<Byte>();
 
-    RTPpacket correctedRTPpacket = new RTPpacket(this.FEC_PT,nr,fec.gettimestamp(),data, data.size());
-    fec.addRtp(correctedRTPpacket);
+    for (int i:fecPacketList) {
+      if(i != nr) {
+        RTPpacket p = rtpStack.get(i);
+        fec.addRtp(p);
+      }
+    }
     return fec.getLostRtp(nr);
   }
 
@@ -306,6 +317,7 @@ public class FecHandler {
    */
   private void clearStack(int nr) {
     //TASK complete this method!
+
   }
 
   // *************** Receiver Statistics ***********************************************************
