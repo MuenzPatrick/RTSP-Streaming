@@ -306,8 +306,8 @@ public class FecHandler {
     //TASK complete this method!
 
     List<Integer> fecPacketList  = fecList.get(nr);
-    ArrayList<Byte>data = new ArrayList<Byte>();
 
+    //reset values
     fec.setFecHeader(maxGroupSize,this.FEC_PT,nr,0,0);
 
     for (int i:fecPacketList) {
@@ -317,7 +317,7 @@ public class FecHandler {
       }
     }
     RTPpacket corrected = fec.getLostRtp(nr);
-    //rtpStack.put(nr,corrected);
+    rtpStack.put(nr,corrected);
     return corrected;
   }
 
@@ -327,6 +327,7 @@ public class FecHandler {
    * @param nr Media Sequence Nr.
    */
   private void clearStack(int nr) {
+    rtpStack.remove(nr);
     //TASK complete this method!
 
   }
