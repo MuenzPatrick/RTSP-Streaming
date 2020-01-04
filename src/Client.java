@@ -419,9 +419,9 @@ public class Client {
       //TASK complete the statistics
     private void setStatistics() {
       DecimalFormat df = new DecimalFormat("###.###");
-      double ratio = 0.0;
+      double ratio;
       if((fec.getNrCorrected()+fec.getNrNotCorrected())> 0) {
-          ratio = fec.getNrCorrected()/(fec.getNrCorrected()+fec.getNrNotCorrected());
+          ratio = (double)fec.getNrCorrected()/((double)fec.getNrCorrected()+(double)fec.getNrNotCorrected());
       } else {
           ratio = 0.0;
       }

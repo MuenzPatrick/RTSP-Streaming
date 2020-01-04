@@ -317,7 +317,7 @@ public class FecHandler {
       }
     }
     RTPpacket corrected = fec.getLostRtp(nr);
-    rtpStack.put(nr,corrected);
+    //rtpStack.put(nr,corrected);
     return corrected;
   }
 
