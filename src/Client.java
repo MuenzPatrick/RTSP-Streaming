@@ -399,11 +399,10 @@ public class Client {
       // TODO decoding of incomplete list to show fragments of pictures instead of discarding
       if (rtpList == null) return;
 
-      payload = JpegFrame.combineToOneImage(rtpList);
-      System.out.println("Display TS: " + (0xFFFFFFFFL & rtpList.get(0).TimeStamp)
-          + " size: " + payload.length);
-
       try {
+        payload = JpegFrame.combineToOneImage(rtpList);
+        System.out.println("Display TS: " + (0xFFFFFFFFL & rtpList.get(0).TimeStamp)
+                + " size: " + payload.length);
         // get an Image object from the payload bitstream
         Toolkit toolkit = Toolkit.getDefaultToolkit();
         Image image = toolkit.createImage(payload, 0, payload.length);
