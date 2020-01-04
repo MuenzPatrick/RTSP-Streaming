@@ -445,7 +445,7 @@ public class Server extends JFrame implements ActionListener, ChangeListener {
    */
   //TODO PM Complete the OPTIONS response
   private String options() {
-    return "Public: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE";
+    return "Public: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE" + CRLF;
   }
 
 
@@ -457,7 +457,7 @@ public class Server extends JFrame implements ActionListener, ChangeListener {
 
 // Write the body first so we can get the size later
     rtspBody.write("v=0" + CRLF);
-    rtspBody.write("o=paul " + RTSP_ID + "IN IP4 localhost" + CRLF);
+    rtspBody.write("o=patrick " + RTSP_ID + "IN IP4 localhost" + CRLF);
     rtspBody.write("s=IT2 RTSP Streaming" + CRLF);
     rtspBody.write("t=0 " + CRLF);
     rtspBody.write("i=" + VideoFileName + CRLF);

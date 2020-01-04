@@ -318,7 +318,12 @@ public class Client {
       RTSPSeqNb++;
       send_RTSP_request("OPTIONS");
 
+
       if (parse_server_response() != 200) System.out.println("Invalid Server Response");
+      else {
+
+      }
+
     }
   }
 
