@@ -304,11 +304,12 @@ public class FecHandler {
    */
   private RTPpacket correctRtp(int nr) {
    //TASK complete this method!
-
+    int currentFec = fecNr.get(nr);
+    fec = fecStack.get(currentFec);
     List<Integer> fecPacketList  = fecList.get(nr);
 
     //reset values
-    fec.setFecHeader(maxGroupSize,this.FEC_PT,nr,0,0);
+    //fec.setFecHeader(maxGroupSize,this.FEC_PT,nr,0,0);
 
     for (int i:fecPacketList) {
       if(i != nr) {
@@ -327,9 +328,11 @@ public class FecHandler {
    * @param nr Media Sequence Nr.
    */
   private void clearStack(int nr) {
+    tsList.remove(rtpStack.get(nr).gettimestamp());
     rtpStack.remove(nr);
-    //TASK complete this method!
-
+    fecStack.remove(fecNr.get(nr));
+    fecNr.remove(nr);
+    fecList.remove(nr);
   }
 
   // *************** Receiver Statistics ***********************************************************
