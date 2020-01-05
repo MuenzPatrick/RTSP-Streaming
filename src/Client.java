@@ -3,6 +3,8 @@ Client
 usage: java Client [Server hostname] [Server RTSP listening port] [Video file requested]
 ---------------------- */
 
+import sun.security.krb5.internal.SeqNumber;
+
 import java.io.*;
 import java.net.*;
 import java.text.DecimalFormat;
@@ -43,7 +45,7 @@ public class Client {
   // RTP variables:
   // ----------------
   DatagramSocket RTPsocket; // socket to be used to send and receive UDP packets
-  //DatagramSocket FECsocket; // socket to be used to send and receive UDP packets for FEC
+  DatagramSocket FECsocket; // socket to be used to send and receive UDP packets for FEC
   FecHandler fec;
   static int RTP_RCV_PORT = 25000; // port where the client will receive the RTP packets
   // static int FEC_RCV_PORT = 25002; // port where the client will receive the RTP packets
@@ -61,6 +63,8 @@ public class Client {
   static final int INIT = 0;
   static final int READY = 1;
   static final int PLAYING = 2;
+  static final int PAUSE = 3;
+  static final int TEARDOWN = 4;
   static int state; // RTSP state == INIT or READY or PLAYING
   Socket RTSPsocket; // socket used to send/receive RTSP messages
   // input and output stream filters
@@ -197,15 +201,11 @@ public class Client {
       if (state == INIT) {
         // Init non-blocking RTPsocket that will be used to receive data
         try {
-          // TASK construct a new DatagramSocket to receive server RTP packets on port RTP_RCV_PORT
-          RTPsocket = new DatagramSocket();
-
+          RTPsocket = new DatagramSocket(RTP_RCV_PORT);
           // for now FEC packets are received via RTP-Port, so keep comment below
           // FECsocket = new DatagramSocket(FEC_RCV_PORT);
 
-          // TASK set Timeout value of the socket to 1 ms
-          // ....
-          System.out.println("Socket receive buffer: " + RTPsocket.getReceiveBufferSize());
+          RTPsocket.setSoTimeout(1);
 
           // Init the FEC-handler
           fec = new FecHandler( checkBoxFec.isSelected() );
@@ -229,10 +229,8 @@ public class Client {
         System.out.println("Wait for response...");
         if (parse_server_response() != 200) System.out.println("Invalid Server Response");
         else {
-          // TASK change RTSP state and print new state to console and statusLabel
-          // state = ....
-          // statusLabel
-          // System.out.println("New RTSP state: ");
+          state = READY;
+          System.out.println("New RTSP state: READY " + state);
         }
       } // else if state != INIT then do nothing
     }
@@ -244,8 +242,7 @@ public class Client {
 
       System.out.println("Play Button pressed !");
       if (state == READY) {
-        // TASK increase RTSP sequence number
-        // .....
+        RTSPSeqNb++;
 
         // Send PLAY message to the server
         send_RTSP_request("PLAY");
@@ -253,9 +250,8 @@ public class Client {
         // Wait for the response
         if (parse_server_response() != 200) System.out.println("Invalid Server Response");
         else {
-          //TASK change RTSP state and print out new state to console an statusLabel
-          // state = ....
-
+          state = PLAYING;
+          System.out.println("New RTSP state: PLAYING " + state);
           // start the timer
           timer.start();
           timerPlay.start();
@@ -270,18 +266,15 @@ public class Client {
 
       System.out.println("Pause Button pressed !");
       if (state == PLAYING) {
-        // TASK increase RTSP sequence number
-        // ....
-
+        RTSPSeqNb++;
         // Send PAUSE message to the server
         send_RTSP_request("PAUSE");
 
         // Wait for the response
         if (parse_server_response() != 200) System.out.println("Invalid Server Response");
         else {
-          // TASK change RTSP state and print out new state to console and statusLabel
-          // state = ....
-
+          state = READY;
+          System.out.println("New RTSP state: PAUSE " + state);
           // stop the timer
           timer.stop();
           timerPlay.stop();
@@ -297,17 +290,15 @@ public class Client {
     public void actionPerformed(ActionEvent e) {
 
       System.out.println("Teardown Button pressed !");
-      // TASK increase RTSP sequence number
-
+      RTSPSeqNb++;
       // Send TEARDOWN message to the server
       send_RTSP_request("TEARDOWN");
 
       // Wait for the response
       if (parse_server_response() != 200) System.out.println("Invalid Server Response");
       else {
-        // TASK change RTSP state and print out new state to console and statusLabel
-        // state = ....
-
+        state = INIT;
+        System.out.println("New RTSP state: TEARDOWN " + state);
         // stop the timer
         timer.stop();
         timerPlay.stop();
@@ -327,7 +318,12 @@ public class Client {
       RTSPSeqNb++;
       send_RTSP_request("OPTIONS");
 
+
       if (parse_server_response() != 200) System.out.println("Invalid Server Response");
+      else {
+
+      }
+
     }
   }
 
@@ -366,13 +362,14 @@ public class Client {
                 + " Size: " + rtp.getlength());
 
         // TASK remove comment for debugging
-        // rtp.printheader(); // print rtp header bitstream for debugging
+        rtp.printheader(); // print rtp header bitstream for debugging
         fec.rcvRtpPacket(rtp); // stores the received RTP packet in jitter buffer
+        RTSPSeqNb++;
 
       } catch (InterruptedIOException iioe) {
         // System.out.println("Nothing to read");
       } catch (IOException ioe) {
-        System.out.println("Exception caught: " + ioe);
+          System.out.println("Exception caught: " + ioe);
       }
     }
   }
@@ -407,11 +404,10 @@ public class Client {
       // TODO decoding of incomplete list to show fragments of pictures instead of discarding
       if (rtpList == null) return;
 
-      payload = JpegFrame.combineToOneImage(rtpList);
-      System.out.println("Display TS: " + (0xFFFFFFFFL & rtpList.get(0).TimeStamp)
-          + " size: " + payload.length);
-
       try {
+        payload = JpegFrame.combineToOneImage(rtpList);
+        System.out.println("Display TS: " + (0xFFFFFFFFL & rtpList.get(0).TimeStamp)
+                + " size: " + payload.length);
         // get an Image object from the payload bitstream
         Toolkit toolkit = Toolkit.getDefaultToolkit();
         Image image = toolkit.createImage(payload, 0, payload.length);
@@ -428,25 +424,31 @@ public class Client {
       //TASK complete the statistics
     private void setStatistics() {
       DecimalFormat df = new DecimalFormat("###.###");
+      double ratio;
+      if((fec.getNrCorrected()+fec.getNrNotCorrected())> 0) {
+          ratio = (double)fec.getNrCorrected()/((double)fec.getNrCorrected()+(double)fec.getNrNotCorrected());
+      } else {
+          ratio = 0.0;
+      }
       pufferLabel.setText(
           "Puffer: "
               + ""  //
               + " aktuelle Nr. / Summe empf.: "
-              + " / "
+              + fec.getSeqNr() + " / " + RTSPSeqNb
               + "");
       statsLabel.setText(
           "<html>Abspielzähler / verlorene Medienpakete // Bilder / verloren: "
               + ""
-              + " / "
+              + fec.getPlayCounter() + " / " + fec.getNrLost() + " // " + fec.getNrFramesRequested() + " / " + fec.getNrFramesLost()
               + ""
               + "<p/>"
               + "</html>");
       fecLabel.setText(
           "FEC: korrigiert / nicht korrigiert: "
               + ""
-              + " / "
+              + fec.getNrCorrected() + " / " + fec.getNrNotCorrected()
               + ""
-              + "  Ratio: "
+              + "  Ratio: " + ratio
               + "");
     }
   }
@@ -547,18 +549,13 @@ public class Client {
       if (request_type.equals("SETUP")) rtsp = rtsp + "/trackID=0";
 
       String rtspReq = "";
-      //TASK Complete the RTSP request method line
-      // rtspReq = ....
-
-      // TASK write the CSeq line:
-      // rtspReq += ....
-
+      rtspReq = request_type + " " + rtsp+ "RTSP/1.0\n";
+      rtspReq += "CSeq: 1\n";
       // check if request_type is equal to "SETUP" and in this case write the Transport: line
       // advertising to the server the port used to receive the RTP packets RTP_RCV_PORT
       // otherwise, write the Session line from the RTSPid field
       if (request_type.equals("SETUP")) {
-        //TASK Complete the Transport Attribute
-        rtspReq += "Transport:";
+        rtspReq += "Transport: rtp/udp; compression; port=" + RTP_RCV_PORT + CRLF;
       }
 
       // SessionIS if available

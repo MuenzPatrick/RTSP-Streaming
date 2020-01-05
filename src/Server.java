@@ -311,15 +311,15 @@ public class Server extends JFrame implements ActionListener, ChangeListener {
     String label;
     if (fec) label = " fec ";
     else label = " media ";
-    // TASK correct the if-instruction to work properly
-    if (random.nextDouble() > 0.0) {
+    // TODO PM correct the if-instruction to work properly
+    if (random.nextDouble() > lossRate) {
       System.out.println("Send frame: " + imagenb + label);
       RTPsocket.send(senddp);
     } else {
       System.err.println("Dropped frame: " + imagenb + label);
       if (!fec) dropCounter++;
     }
-    // System.out.println("Drop count media packets: " +  dropCounter);
+     System.out.println("Drop count media packets: " +  dropCounter);
   }
 
   /**
@@ -443,27 +443,29 @@ public class Server extends JFrame implements ActionListener, ChangeListener {
   /** Creates a OPTIONS response string
    * @return  Options string, starting with: Public: ...
    */
-  //TASK Complete the OPTIONS response
+  //TODO PM Complete the OPTIONS response
   private String options() {
-    return "....";
+    return "Public: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE" + CRLF;
   }
 
 
   /** Creates a DESCRIBE response string in SDP format for current media */
-  //TASK Complete the DESCRIBE response
+  //TODO PM Complete the DESCRIBE response
   private String describe() {
     StringWriter rtspHeader = new StringWriter();
     StringWriter rtspBody = new StringWriter();
 
-    // Write the body first so we can get the size later
+// Write the body first so we can get the size later
     rtspBody.write("v=0" + CRLF);
-    rtspBody.write("...");
-    rtspBody.write("...");
-    rtspBody.write("...");
+    rtspBody.write("o=patrick " + RTSP_ID + "IN IP4 localhost" + CRLF);
+    rtspBody.write("s=IT2 RTSP Streaming" + CRLF);
+    rtspBody.write("t=0 " + CRLF);
+    rtspBody.write("i=" + VideoFileName + CRLF);
+    rtspBody.write("m=video " + RTPsocket.getLocalPort() + "RTP/AVP " + CRLF);
 
-    rtspHeader.write("Content-Base: " + "");
-    rtspHeader.write("Content-Type: " + "");
-    rtspHeader.write("Content-Length: " + "");
+    rtspHeader.write("Content-Base: rtsp://" + VideoDir + VideoFileName + CRLF);
+    rtspHeader.write("Content-Type: " + "application/sdp" + CRLF);
+    rtspHeader.write("Content-Length: " + rtspBody.toString().length() + CRLF);
     rtspHeader.write(CRLF);
 
     return rtspHeader.toString() + rtspBody.toString();

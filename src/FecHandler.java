@@ -1,3 +1,4 @@
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +36,7 @@ public class FecHandler {
   static final int maxGroupSize = 48;
   int fecGroupSize; // FEC group size
   int fecGroupCounter;
+  int lastCorrected = 0;
 
   // -> Receiver
   boolean useFec;
@@ -274,7 +276,24 @@ public class FecHandler {
    */
   private boolean checkCorrection(int nr) {
     //TASK complete this method!
-    return false;
+    //Ein Paketverlust tritt auf, wenn von den k+1
+    //zusammengehörigen Paketen mehr als ein Paket verloren geht.
+    List<Integer> fecPacketList = fecList.get(nr);
+    if(fecPacketList == null) return false;
+    for(int n : fecPacketList) {
+      if (n == lastCorrected) {
+        return false;
+      }
+      if(n != nr) {
+        RTPpacket p = rtpStack.get(n);
+        if (p == null) {
+          return false;
+        }
+      }
+    }
+
+    lastCorrected = nr;
+    return true;
   }
 
   /**
@@ -284,8 +303,23 @@ public class FecHandler {
    * @return RTP packet
    */
   private RTPpacket correctRtp(int nr) {
-    //TASK complete this method!
-    return fec.getLostRtp(nr);
+   //TASK complete this method!
+    int currentFec = fecNr.get(nr);
+    fec = fecStack.get(currentFec);
+    List<Integer> fecPacketList  = fecList.get(nr);
+
+    //reset values
+    //fec.setFecHeader(maxGroupSize,this.FEC_PT,nr,0,0);
+
+    for (int i:fecPacketList) {
+      if(i != nr) {
+        RTPpacket p = rtpStack.get(i);
+        fec.addRtp(p);
+      }
+    }
+    RTPpacket corrected = fec.getLostRtp(nr);
+    //rtpStack.put(nr,corrected);
+    return corrected;
   }
 
   /**
@@ -294,7 +328,11 @@ public class FecHandler {
    * @param nr Media Sequence Nr.
    */
   private void clearStack(int nr) {
-    //TASK complete this method!
+    tsList.remove(rtpStack.get(nr).gettimestamp());
+    rtpStack.remove(nr);
+    fecStack.remove(fecNr.get(nr));
+    fecNr.remove(nr);
+    fecList.remove(nr);
   }
 
   // *************** Receiver Statistics ***********************************************************
